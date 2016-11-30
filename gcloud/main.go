@@ -20,8 +20,18 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
+
+/*
+// uncomment for completion debugging
+var sl *log.Logger
+func init() {
+	fout, _ := os.Create("secret_log")
+	sl = log.New(fout, "", 0)
+}
+*/
 
 // Relevant environment variables, for easy discovery.
 const (
@@ -37,6 +47,7 @@ const (
 )
 
 func main() {
+
 	// If it's a special pincloud management command, don't forward to gcloud.
 	if pincloudCommand() {
 		return
@@ -50,7 +61,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not load pins: %v.", err)
 	}
-	args, err := plist.mapCommand(os.Args)
+
+	commandArgs := os.Args
+	if compLine := os.Getenv("COMP_LINE"); compLine != "" {
+		shlexed, err := shlex(compLine)
+		if err == nil {
+			commandArgs = shlexed
+		}
+	}
+
+	args, env, err := plist.mapCommand(commandArgs)
 	if err != nil {
 		log.Fatalf("Could not map command: %v.", err)
 	}
@@ -61,7 +81,10 @@ func main() {
 		log.Fatalf("Invalid pin: %q is a directory.", args[0])
 	}
 
+	log.Printf("Using %q", args[0])
+
 	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Env = env
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
@@ -198,7 +221,7 @@ func loadPins(r io.Reader) (PinList, error) {
 	return plist, nil
 }
 
-func (plist PinList) mapCommand(args []string) ([]string, error) {
+func (plist PinList) mapCommand(args []string) ([]string, []string, error) {
 	// Skip non-positionals.
 	var positionals []string
 	for _, arg := range args {
@@ -207,7 +230,11 @@ func (plist PinList) mapCommand(args []string) ([]string, error) {
 		}
 		positionals = append(positionals, arg)
 	}
+
 	// Find the first pattern that prefix-matches the positionals.
+
+	var partialPatternMatch Pin
+
 plist:
 	for _, p := range plist {
 		pat := p.Pattern
@@ -226,6 +253,11 @@ plist:
 
 		for len(pat) > 0 {
 			if pat[0] != checkArgs[0] {
+				// If this is the last word and it's a prefix match, find the
+				// closest thing for completioon and help messages.
+				if len(pat) == 1 && strings.HasPrefix(pat[0], checkArgs[0]) {
+					partialPatternMatch = p
+				}
 				// Mismatch - try the next pattern.
 				continue plist
 			}
@@ -237,14 +269,22 @@ plist:
 		// Prefix match, use this pin.
 		pinnedArgs := append([]string{}, p.Args...)
 		pinnedArgs = append(pinnedArgs, args[1:]...)
-		return pinnedArgs, nil
+		return pinnedArgs, prepareEnvForCompletion(p.Args, os.Environ()), nil
 	}
+
+	if partialPatternMatch.Pattern != nil {
+		// partial match, we still use it.
+		pinnedArgs := append([]string{}, partialPatternMatch.Args...)
+		pinnedArgs = append(pinnedArgs, args[1:]...)
+		return pinnedArgs, prepareEnvForCompletion(partialPatternMatch.Args, os.Environ()), nil
+	}
+
 	// No patterns matched, so use the default gcloud.
 	gcloud, ok := getDefaultGcloud()
 	if !ok {
-		return nil, fmt.Errorf("no patterns matched, and no gcloud on path")
+		return nil, nil, fmt.Errorf("no patterns matched, and no gcloud on path")
 	}
-	return append([]string{gcloud}, args[1:]...), nil
+	return append([]string{gcloud}, args[1:]...), nil, nil
 }
 
 // Get the first gcloud on the path that isn't this binary.
@@ -286,4 +326,49 @@ func getDefaultSDK() (string, bool) {
 		return "", false
 	}
 	return strings.TrimSpace(string(data)), true
+}
+
+func prepareEnvForCompletion(args []string, env []string) []string {
+	if os.Getenv("COMP_LINE") == "" {
+		// COMP_LINE not set, must not be doing completion.
+		return nil
+	}
+	point, err := strconv.Atoi(os.Getenv("COMP_POINT"))
+	if err != nil {
+		return nil
+	}
+
+	if len(args) == 1 {
+		return nil
+	}
+	for i := range env {
+		if !strings.HasPrefix(env[i], "COMP_LINE=") {
+			continue
+		}
+
+		words := strings.SplitN(env[i], " ", 2)
+		if len(words) == 0 {
+			return env
+		}
+
+		oldLen := len(env[i])
+
+		newWords := append([]string{words[0]}, args[1:]...)
+		newWords = append(newWords, words[1:]...)
+		env[i] = strings.Join(newWords, " ")
+
+		newLen := len(env[i])
+		point += newLen - oldLen
+
+		break
+	}
+	for i := range env {
+		if !strings.HasPrefix(env[i], "COMP_POINT=") {
+			continue
+		}
+		env[i] = fmt.Sprintf("COMP_POINT=%d", point)
+		break
+	}
+
+	return env
 }
