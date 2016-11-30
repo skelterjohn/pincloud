@@ -4,6 +4,18 @@ Cloud SDK users often want to pin the SDK to old versions to preserve some funct
 
 pincloud is a tiny `gcloud` wrapper that uses a heuristic to figure out which command is being run, and then consults a config file to decide which "real" version of `gcloud` to use.
 
+## To install
+
+Run the following command.
+
+```
+go get github.com/skelterjohn/pincloud/gcloud
+```
+
+There are no dependencies outside the stdlib, so no vendoring questions need to be answered.
+
+Once pincloud's `gcloud` is installed, make sure it is in your `$PATH` before any other `gcloud`.
+
 ## Default gcloud and SDK
 
 The first `gcloud` in `$PATH` that is not this binary is referred to as the "default `gcloud`". It's the `gcloud` that would have been run if pincloud had not been installed. The SDK that the default `gcloud` comes from is called the default SDK.
