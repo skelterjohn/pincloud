@@ -118,12 +118,18 @@ func pincloudCommand() bool {
 		if err := os.MkdirAll(versionsDir, 0755); err != nil {
 			log.Fatalf("Could not create %q: %v", versionsDir, err)
 		}
+		log.Print("Cloning the default SDK.")
 		if err := exec.Command("cp", "-r", sdkDir, versionDir).Run(); err != nil {
 			log.Fatalf("Could not clone default SDK: %v", err)
 		}
-		if err := exec.Command(filepath.Join(versionDir, "bin", "gcloud"), "components", "update", "-q", "--version", version).Run(); err != nil {
+		log.Printf("Updating the cloned SDK to version %s.", version)
+		updateCmd := exec.Command(filepath.Join(versionDir, "bin", "gcloud"), "components", "update", "-q", "--version", version)
+		updateCmd.Stdout = os.Stdout
+		updateCmd.Stderr = os.Stderr
+		if err := updateCmd.Run(); err != nil {
 			log.Fatalf("Could not update cloned SDK: %v", err)
 		}
+		log.Print("Install complete. Ignore the warnings about old versions of the tools.")
 	case "remove":
 		if err := os.RemoveAll(filepath.Join(getVersionsDirectory(), version)); err != nil {
 			log.Fatalf("Error removing version %q: %v", version, err)
