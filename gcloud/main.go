@@ -70,7 +70,7 @@ func main() {
 		}
 	}
 
-	args, env, err := plist.mapCommand(commandArgs)
+	args, err := plist.mapCommand(commandArgs)
 	if err != nil {
 		log.Fatalf("Could not map command: %v.", err)
 	}
@@ -84,7 +84,6 @@ func main() {
 	log.Printf("Using %q", args[0])
 
 	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Env = env
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
@@ -221,7 +220,7 @@ func loadPins(r io.Reader) (PinList, error) {
 	return plist, nil
 }
 
-func (plist PinList) mapCommand(args []string) ([]string, []string, error) {
+func (plist PinList) mapCommand(args []string) ([]string, error) {
 	// Skip non-positionals.
 	var positionals []string
 	for _, arg := range args {
@@ -269,22 +268,24 @@ plist:
 		// Prefix match, use this pin.
 		pinnedArgs := append([]string{}, p.Args...)
 		pinnedArgs = append(pinnedArgs, args[1:]...)
-		return pinnedArgs, prepareEnvForCompletion(p.Args, os.Environ()), nil
+		prepareEnvForCompletion(p.Args)
+		return pinnedArgs, nil
 	}
 
 	if partialPatternMatch.Pattern != nil {
 		// partial match, we still use it.
 		pinnedArgs := append([]string{}, partialPatternMatch.Args...)
 		pinnedArgs = append(pinnedArgs, args[1:]...)
-		return pinnedArgs, prepareEnvForCompletion(partialPatternMatch.Args, os.Environ()), nil
+		prepareEnvForCompletion(partialPatternMatch.Args)
+		return pinnedArgs, nil
 	}
 
 	// No patterns matched, so use the default gcloud.
 	gcloud, ok := getDefaultGcloud()
 	if !ok {
-		return nil, nil, fmt.Errorf("no patterns matched, and no gcloud on path")
+		return nil, fmt.Errorf("no patterns matched, and no gcloud on path")
 	}
-	return append([]string{gcloud}, args[1:]...), nil, nil
+	return append([]string{gcloud}, args[1:]...), nil
 }
 
 // Get the first gcloud on the path that isn't this binary.
@@ -328,47 +329,35 @@ func getDefaultSDK() (string, bool) {
 	return strings.TrimSpace(string(data)), true
 }
 
-func prepareEnvForCompletion(args []string, env []string) []string {
-	if os.Getenv("COMP_LINE") == "" {
+func prepareEnvForCompletion(args []string) {
+	compLine := os.Getenv("COMP_LINE")
+	if compLine == "" {
 		// COMP_LINE not set, must not be doing completion.
-		return nil
+		return
 	}
 	point, err := strconv.Atoi(os.Getenv("COMP_POINT"))
 	if err != nil {
-		return nil
+		return
 	}
 
 	if len(args) == 1 {
-		return nil
-	}
-	for i := range env {
-		if !strings.HasPrefix(env[i], "COMP_LINE=") {
-			continue
-		}
-
-		words := strings.SplitN(env[i], " ", 2)
-		if len(words) == 0 {
-			return env
-		}
-
-		oldLen := len(env[i])
-
-		newWords := append([]string{words[0]}, args[1:]...)
-		newWords = append(newWords, words[1:]...)
-		env[i] = strings.Join(newWords, " ")
-
-		newLen := len(env[i])
-		point += newLen - oldLen
-
-		break
-	}
-	for i := range env {
-		if !strings.HasPrefix(env[i], "COMP_POINT=") {
-			continue
-		}
-		env[i] = fmt.Sprintf("COMP_POINT=%d", point)
-		break
+		// No special preparation is needed unless the pin adds a release track.
+		return
 	}
 
-	return env
+	words := strings.SplitN(compLine, " ", 2)
+	if len(words) == 0 {
+		return
+	}
+
+	oldLen := len(compLine)
+
+	newWords := append([]string{words[0]}, args[1:]...)
+	newWords = append(newWords, words[1:]...)
+	compLine = strings.Join(newWords, " ")
+
+	newLen := len(compLine)
+	point += newLen - oldLen
+	os.Setenv("COMP_LINE", compLine)
+	os.Setenv("COMP_POINT", fmt.Sprint(point))
 }
