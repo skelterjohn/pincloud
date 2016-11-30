@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 /*
@@ -88,7 +89,12 @@ func main() {
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
 	if err := cmd.Run(); err != nil {
-		// TODO: return the right exit code
+		if err, ok := err.(*exec.ExitError); ok {
+			if status, ok := err.Sys().(syscall.WaitStatus); ok {
+				os.Exit(status.ExitStatus())
+			}
+		}
+		// Oh well, use 1.
 		os.Exit(1)
 	}
 }
