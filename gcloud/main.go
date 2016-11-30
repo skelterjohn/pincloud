@@ -254,7 +254,7 @@ plist:
 		for len(pat) > 0 {
 			if pat[0] != checkArgs[0] {
 				// If this is the last word and it's a prefix match, find the
-				// closest thing for completioon and help messages.
+				// closest thing for completion and help messages.
 				if len(pat) == 1 && strings.HasPrefix(pat[0], checkArgs[0]) {
 					partialPatternMatch = p
 				}
