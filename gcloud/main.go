@@ -82,8 +82,6 @@ func main() {
 		log.Fatalf("Invalid pin: %q is a directory.", args[0])
 	}
 
-	log.Printf("Using %q", args[0])
-
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
@@ -244,7 +242,7 @@ func (plist PinList) mapCommand(args []string) ([]string, error) {
 
 	// Find the first pattern that prefix-matches the positionals.
 
-	var partialPatternMatch Pin
+	var matchedPin Pin
 
 plist:
 	for _, p := range plist {
@@ -267,7 +265,7 @@ plist:
 				// If this is the last word and it's a prefix match, find the
 				// closest thing for completion and help messages.
 				if len(pat) == 1 && strings.HasPrefix(pat[0], checkArgs[0]) {
-					partialPatternMatch = p
+					matchedPin = p
 				}
 				// Mismatch - try the next pattern.
 				continue plist
@@ -278,17 +276,16 @@ plist:
 		}
 
 		// Prefix match, use this pin.
-		pinnedArgs := append([]string{}, p.Args...)
-		pinnedArgs = append(pinnedArgs, args[1:]...)
-		prepareEnvForCompletion(p.Args)
-		return pinnedArgs, nil
+		matchedPin = p
+		break
 	}
 
-	if partialPatternMatch.Pattern != nil {
+	if matchedPin.Pattern != nil {
 		// partial match, we still use it.
-		pinnedArgs := append([]string{}, partialPatternMatch.Args...)
+		log.Printf("Using %q", matchedPin.Args[0])
+		pinnedArgs := append([]string{}, matchedPin.Args...)
 		pinnedArgs = append(pinnedArgs, args[1:]...)
-		prepareEnvForCompletion(partialPatternMatch.Args)
+		prepareEnvForCompletion(matchedPin.Args)
 		return pinnedArgs, nil
 	}
 
