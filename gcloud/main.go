@@ -180,6 +180,9 @@ type Pin struct {
 type PinList []Pin
 
 func loadPins(r io.Reader) (PinList, error) {
+	defaultGcloud, defaultOk := getDefaultGcloud()
+	// It's ok to not have a default gcloud, so we only complain if they reference it.
+
 	data, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, fmt.Errorf("could not read pin data: %v", err)
@@ -217,13 +220,21 @@ func loadPins(r io.Reader) (PinList, error) {
 		if len(p.Args) == 0 {
 			return nil, fmt.Errorf("zero-len args in %q", l)
 		}
-		// p.Args[0] is the sdk version to use. If it's not absolute, it's
-		// located in the versions directory.
-		if !filepath.IsAbs(p.Args[0]) {
-			p.Args[0] = filepath.Join(getVersionsDirectory(), p.Args[0])
+		// If p.Args is a simple 'gcloud', use the default SDK.
+		if p.Args[0] == "gcloud" {
+			if !defaultOk {
+				return nil, fmt.Errorf("%q specifies the default gcloud, but none was found", l)
+			}
+			p.Args[0] = defaultGcloud
+		} else {
+			// p.Args[0] is the sdk version to use. If it's not absolute, it's
+			// located in the versions directory.
+			if !filepath.IsAbs(p.Args[0]) {
+				p.Args[0] = filepath.Join(getVersionsDirectory(), p.Args[0])
+			}
+			// We actually want the bin/gcloud from within the directory indicated.
+			p.Args[0] = filepath.Join(p.Args[0], "bin", "gcloud")
 		}
-		// We actually want the bin/gcloud from within the directory indicated.
-		p.Args[0] = filepath.Join(p.Args[0], "bin", "gcloud")
 
 		plist = append(plist, p)
 	}
@@ -282,7 +293,7 @@ plist:
 
 	if matchedPin.Pattern != nil {
 		// partial match, we still use it.
-		log.Printf("Using %q", matchedPin.Args[0])
+		log.Printf("Using %q", matchedPin.Args)
 		pinnedArgs := append([]string{}, matchedPin.Args...)
 		pinnedArgs = append(pinnedArgs, args[1:]...)
 		prepareEnvForCompletion(matchedPin.Args)

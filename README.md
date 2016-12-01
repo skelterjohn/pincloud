@@ -28,6 +28,7 @@ A file `~/.config/pincloud/pins.cfg` will store the pincloud configuration. By e
 gcloud alpha container builds: /path/to/sdk-135.0.0/gcloud
 gcloud app deploy: /path/to/sdk/102.0.0/gcloud preview
 gcloud compute: 135.0.0
+gcloud container builds: gcloud beta
 ```
 
 The first entry pins the CloudBuild CLI to version 135, which the user installed somewhere on the system.
@@ -35,6 +36,8 @@ The first entry pins the CloudBuild CLI to version 135, which the user installed
 The second entry pins `gcloud app deploy` to the preview version of that command in version 102.
 
 The third entry pins `gcloud compute` commands to the SDK in `~/.config/pincloud/versions/135.0.0`. If the pin is not an absolute path, it is assumed to be a short version found in the directory where pincloud lee[s] managed SDK versions.
+
+The fourth entry pins `gcloud container builds` commands to the default `gcloud` except with `beta` stuck in there. So, it does not change the version, but remaps the command onto the same version.
 
 The rule is: if pincloud recognizes the command or command group on the left, it replaces arg 0 with the args on the right. So, things like `preview` or `beta` can be inserted.
 
